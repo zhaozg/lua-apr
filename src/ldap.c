@@ -226,8 +226,7 @@ static int check_ldap_option(lua_State *L, int idx)
   for (i = 0; i < count(lua_apr_ldap_options); i++)
     if (strcmp(name, lua_apr_ldap_options[i].name) == 0)
       return i;
-
-  return luaL_error(L, lua_pushfstring(L, "invalid option '%s'", name));
+  return -1;
 }
 
 /* number_to_time() {{{2 */
@@ -990,6 +989,11 @@ static int lua_apr_ldap_option_get(lua_State *L)
   /* Check the arguments. */
   object = check_ldap_connection(L, 1);
   optidx = check_ldap_option(L, 2);
+  if (optidx==-1){
+	  lua_pushnil(L);
+	  lua_pushfstring(L, "invalid option '%s'", lua_tostring(L,2));
+	  return 2;
+  }
 
   /* Get the option value. */
   status = apr_ldap_get_option(object->pool, object->ldap,
@@ -1041,7 +1045,11 @@ static int lua_apr_ldap_option_set(lua_State *L)
 
   object = check_ldap_connection(L, 1);
   optidx = check_ldap_option(L, 2);
-
+  if (optidx==-1){
+	  lua_pushnil(L);
+	  lua_pushfstring(L, "invalid or not supported option '%s'", lua_tostring(L,2));
+	  return 2;
+  }
   /* Convert the Lua value to an LDAP C API value. */
   type = ldap_option_type(optidx);
   if (type == LUA_APR_LDAP_TB) {
