@@ -38,7 +38,7 @@
 
 /* Private parts. {{{1 */
 
-const char *status_names[] = { "init", "running", "done", "error" };
+const char *status_names[] = { "init", "running", "done", "error", "detach" };
 
 #define check_thread(L, idx) \
   (lua_apr_thread_object*)check_object(L, idx, &lua_apr_thread_type)
@@ -46,7 +46,7 @@ const char *status_names[] = { "init", "running", "done", "error" };
 #define thread_busy(T) \
   ((T)->status == TS_INIT || (T)->status == TS_RUNNING)
 
-typedef enum { TS_INIT, TS_RUNNING, TS_DONE, TS_ERROR } thread_status_t;
+typedef enum { TS_INIT, TS_RUNNING, TS_DONE, TS_ERROR, TS_DETACH } thread_status_t;
 
 typedef struct {
   lua_apr_refobj header;
@@ -299,6 +299,28 @@ static int thread_status(lua_State *L)
   return 1;
 }
 
+/* thread:detach() -> status {{{1
+ *
+ * Returns a boolean value for result:
+ *
+ *  -  true`: the thread detach successfully
+ *  - `nil : the thread detach failed, and folow a error msg
+ */
+
+static int thread_detach(lua_State *L)
+{
+  lua_apr_thread_object *object = check_thread(L, 1);
+  apr_status_t status = apr_thread_detach(object->handle);
+  if (status == APR_SUCCESS) {
+    object->status = TS_DETACH;
+     lua_pushboolean(L, 1);
+  } else {
+    return push_error_status(L, status);
+  }
+
+  return 1;
+}
+
 /* thread:__tostring() {{{1 */
 
 static int thread_tostring(lua_State *L)
@@ -320,13 +342,17 @@ static int thread_gc(lua_State *L)
   thread = check_thread(L, 1);
   if (!thread->joined) {
     fprintf(stderr, "Lua/APR joining child thread from __gc() hook ..\n");
-    status = apr_thread_join(&unused, thread->handle);
-    if (status != APR_SUCCESS) {
-      char message[LUA_APR_MSGSIZE];
-      apr_strerror(status, message, count(message));
-      fprintf(stderr, "Lua/APR failed to join thread: %s\n", message);
-    } else if (thread->status == TS_ERROR) {
-      fprintf(stderr, "Lua/APR thread exited with error: %s\n", (char*)thread->output);
+    if (thread->status == TS_DETACH){
+      fprintf(stderr, "Lua/APR thread detach error: %s\n", (char*)thread->output);
+    }else{
+      status = apr_thread_join(&unused, thread->handle);
+      if (status != APR_SUCCESS) {
+        char message[LUA_APR_MSGSIZE];
+        apr_strerror(status, message, count(message));  
+        fprintf(stderr, "Lua/APR failed to join thread: %s\n", message);
+      } else if (thread->status == TS_ERROR) {
+        fprintf(stderr, "Lua/APR thread exited with error: %s\n", (char*)thread->output);
+      } 
     }
   }
   thread_destroy(thread);
@@ -339,6 +365,7 @@ static int thread_gc(lua_State *L)
 static luaL_Reg thread_methods[] = {
   { "join", thread_join },
   { "status", thread_status },
+  { "detach", thread_detach },
   { NULL, NULL }
 };
 
