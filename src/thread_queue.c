@@ -13,6 +13,7 @@
 
 #include "lua_apr.h"
 #if APR_HAS_THREADS
+#include <apr_queue.h>
 
 #define check_queue(L, idx) \
   ((lua_apr_queue*)check_object((L), (idx), &lua_apr_queue_type))
