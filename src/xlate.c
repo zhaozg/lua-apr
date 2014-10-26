@@ -51,7 +51,7 @@ int lua_apr_xlate(lua_State *L)
   apr_size_t todo, unused;
   char *output, *temp;
 
-  pool = to_pool(L);
+  apr_pool_create(&pool,to_pool(L));
   input = luaL_checklstring(L, 1, &length);
   frompage = check_codepage(L, 2);
   topage = check_codepage(L, 3);
@@ -112,11 +112,11 @@ int lua_apr_xlate(lua_State *L)
   /* I'm not sure whether any resources remain in memory after the call to
    * apr_xlate_close(). Just to make sure, we clear the global memory pool
    * now instead of waiting until the next time it's used. */
-  apr_pool_clear(pool);
+  apr_pool_destroy(pool);
   return 1;
 
 fail:
   free(output);
-  apr_pool_clear(pool);
+  apr_pool_destroy(pool);
   return push_status(L, status);
 }
