@@ -85,6 +85,7 @@ typedef struct {
   const apr_dbd_driver_t *driver;
   apr_dbd_t *handle;
   apr_dbd_transaction_t *trans;
+  int managed;
 } lua_apr_dbd_object;
 
 /* XXX The result set object's memory pool must be the same memory pool used
@@ -455,7 +456,7 @@ int lua_apr_dbd(lua_State *L)
   status = apr_dbd_get_driver(driver->pool, name, &driver->driver);
   if (status != APR_SUCCESS)
     return push_error_status(L, status);
-
+  driver->managed = 1;
   return 1;
 }
 
@@ -1078,9 +1079,12 @@ static int dbd_close(lua_State *L)
   apr_status_t status;
 
   object = check_dbd(L, 1, 1, 0);
-  status = dbd_close_impl(object);
+  if(object->managed){
+    status = dbd_close_impl(object);
 
-  return push_status(L, status);
+    return push_status(L, status);
+  }
+  return 0;
 }
 
 /* tostring(driver) -> string {{{1 */
@@ -1103,9 +1107,11 @@ static int dbd_tostring(lua_State *L)
 static int dbd_gc(lua_State *L)
 {
   lua_apr_dbd_object *driver = check_dbd(L, 1, 0, 0);
-  if (object_collectable((lua_apr_refobj*)driver))
-    dbd_close_impl(driver);
-  release_object((lua_apr_refobj*)driver);
+  if(driver->managed) {
+    if (object_collectable((lua_apr_refobj*)driver))
+      dbd_close_impl(driver);
+    release_object((lua_apr_refobj*)driver);
+  }
   return 0;
 }
 
@@ -1207,4 +1213,29 @@ lua_apr_objtype lua_apr_dbp_type = {
   dbp_metamethods             /* metamethods table */
 };
 
+#ifdef SUPPORT_MOD_DBD
+#include "mod_dbd.h"
+
+LUA_APR_EXPORT int lua_apr_dbd_register(lua_State *L, ap_dbd_t* a_dbd)
+{
+    apr_status_t status;
+    apr_pool_t *pool = a_dbd->pool;
+    lua_apr_dbd_object *driver = new_object(L, &lua_apr_dbd_type);
+    if (driver == NULL)
+        return push_error_memory(L);
+
+    /* FIXME I'm not sure whether these pools should be related! */
+    status = apr_pool_create_ex(&driver->pool, pool, NULL, NULL);
+    if (status != APR_SUCCESS)
+        return push_error_status(L, status);
+
+    driver->driver = a_dbd->driver;
+    /* FIXME should not release a connection */
+    driver->handle = a_dbd->handle;
+    driver->managed = 0;
+
+    return 1;
+}
+
+#endif
 /* vim: set ts=2 sw=2 et tw=79 fen fdm=marker : */
