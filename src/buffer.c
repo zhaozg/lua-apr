@@ -47,6 +47,9 @@
   LUA_APR_DBG("buffer.size  = %i (really %i)", (B)->size, (B)->size); \
 } while (0)
 
+#ifndef lua_str2number
+#define lua_str2number(s,p)	strtod((s), (p))
+#endif /* lua_str2number */
 /* Internal functions. {{{1 */
 
 /* find_win32_eol() {{{2 */
