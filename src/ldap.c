@@ -33,7 +33,9 @@
  */
 
 #include "lua_apr.h"
-#include <apr_ldap.h>
+#if APR_MAJOR_VERSION == 2
+#include "apr2/ldap/apr_ldap.h"
+#endif
 #include <apr_uri.h>
 
 #if APR_HAS_LDAP
